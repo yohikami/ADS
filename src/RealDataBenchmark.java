@@ -6,9 +6,7 @@ public class RealDataBenchmark {
 
     private static final int RUNS = 10;
     private static final int QUERY_COUNT = 500;
-    
-    // We will test the network as it grows from 1000 edges up to 60000 
-    private static final int[] EDGE_LIMITS = {1000, 10000, 40000, 60000};
+    private static final int[] EDGE_LIMITS = {20000, 40000, 60000, 88234};
 
     public static void main(String[] args) {
         String filename = "facebook_combined.txt";
@@ -18,7 +16,7 @@ public class RealDataBenchmark {
         int[][] allEdges = loadRealSNAPDataset(filename);
         if (allEdges == null || allEdges.length == 0) return;
 
-        System.out.println("Real Network Loaded Total Friendships Available: " + allEdges.length);
+        System.out.println("Real Network Loaded, Total Friendships Available: " + allEdges.length);
         System.out.println("\nRunning Scalability Benchmarks on Real Data (Averaged over " + RUNS + " runs)...");
 
         System.out.printf("%-15s | %-15s | %-15s | %-15s | %-15s%n", 
