@@ -1,43 +1,59 @@
 import java.util.*;
 
 public class GraphBFS {
-    // Adjacency List: Maps a User ID to a List of their friends
+    // Map to store users and their friends
     private Map<Integer, List<Integer>> adjList;
 
     public GraphBFS(int n) {
         adjList = new HashMap<>(n);
     }
 
-    // Adds an undirected friendship: O(1) Time
+    // Add a 2-way friendship
     public void addEdge(int u, int v) {
-        adjList.computeIfAbsent(u, k -> new ArrayList<>()).add(v);
-        adjList.computeIfAbsent(v, k -> new ArrayList<>()).add(u);
+        
+        // If user u is new, make an empty list
+        if (!adjList.containsKey(u)) {
+            adjList.put(u, new ArrayList<>());
+        }
+        // Add v to u's list
+        adjList.get(u).add(v);
+
+        // If user v is new, make an empty list
+        if (!adjList.containsKey(v)) {
+            adjList.put(v, new ArrayList<>());
+        }
+        // Add u to v's list
+        adjList.get(v).add(u);
     }
 
-    // Breadth-First Search Traversal
-    // Time Complexity: O(V + E)
+    // BFS search
     public boolean isConnected(int start, int target) {
+        // Check if it's the same person
         if (start == target) return true;
+        
+        // Check if users actually exist in graph
         if (!adjList.containsKey(start) || !adjList.containsKey(target)) return false;
 
         Queue<Integer> queue = new LinkedList<>();
         Set<Integer> visited = new HashSet<>();
 
+        // Start queue
         queue.add(start);
         visited.add(start);
 
+        // Loop until queue is empty
         while (!queue.isEmpty()) {
             int current = queue.poll();
             
-            if (current == target) return true;
+            if (current == target) return true; // Found them
 
-            // Loop Frequency: V + 2E
+            // Check all friends
             for (int friend : adjList.getOrDefault(current, Collections.emptyList())) {
-                if (visited.add(friend)) {
+                if (visited.add(friend)) { // If not visited yet
                     queue.add(friend);
                 }
             }
         }
-        return false;
+        return false; // Not connected
     }
 }

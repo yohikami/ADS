@@ -4,34 +4,35 @@ import java.util.*;
 
 public class RealDataBenchmark {
 
-    private static final int RUNS = 10;
-    private static final int QUERY_COUNT = 500;
-    private static final int[] EDGE_LIMITS = {20000, 40000, 60000, 88234};
+    // Settings
+    private static final int RUNS = 10;        
+    private static final int QUERY_COUNT = 10000; 
+    private static final int[] EDGE_LIMITS = {20000, 40000, 60000, 88234}; 
 
     public static void main(String[] args) {
         String filename = "facebook_combined.txt";
         
-        // 1. Load the master dataset
+        // Read dataset 
         int[][] allEdges = loadRealSNAPDataset(filename);
         if (allEdges == null || allEdges.length == 0) return;
 
-        // 2. JVM WARM-UP PHASE
-        // This ensures the 20,000-edge test doesn't suffer from a "cold start"
-        System.out.println("Priming JVM and performing Just-In-Time (JIT) optimizations...");
+        // Warm up JVM
+        System.out.println("Preparing...");
         performWarmup(allEdges);
-        System.out.println("Warm-up complete. Starting formal empirical evaluation...\n");
+        System.out.println("Ready.\n");
 
-        System.out.println("Total System Evaluation (Build + 500 Queries)");
-        System.out.printf("%-15s | %-12s | %-12s | %-12s | %-12s | %-12s | %-12s%n", 
-                "Edges", "BFS Total(ms)", "UF Total(ms)", "Time Imp.", "BFS Mem(MB)", "UF Mem(MB)", "Mem Red.");
+        // Print headers
+        System.out.println("Performance Test");
+        System.out.printf("%-10s | %-12s | %-12s | %-14s | %-14s | %-12s | %-12s%n", 
+                "Edges", "BFS Build(ms)", "UF Build(ms)", "BFS Query(ms)", "UF Query(ms)", "BFS Mem(MB)", "UF Mem(MB)");
         System.out.println("-".repeat(105));
 
-        // 3. Scalability Loop
+        // Loop through limits
         for (int limit : EDGE_LIMITS) {
             int actualLimit = Math.min(limit, allEdges.length); 
             int[][] subsetEdges = Arrays.copyOfRange(allEdges, 0, actualLimit);
             
-            // Calculate N for this subset to size arrays correctly
+            // Find max user ID to set array sizes
             int maxUser = 0;
             for (int[] edge : subsetEdges) {
                 maxUser = Math.max(maxUser, Math.max(edge[0], edge[1]));
@@ -43,60 +44,77 @@ public class RealDataBenchmark {
     }
 
     private static void runRealBenchmark(int n, int[][] edges, String datasetSize) {
-        long totalTimeBFS = 0, totalTimeUF = 0;
+        long totalBuildBFS = 0, totalBuildUF = 0;
+        long totalQueryBFS = 0, totalQueryUF = 0;
         long totalMemBFS = 0, totalMemUF = 0;
 
         for (int i = 0; i < RUNS; i++) {
+            // Create random queries
             int[][] queries = generateQueries(n);
 
-            // --- BFS Evaluation (Resets every run) ---
-            Runtime.getRuntime().gc();
+            // 1. TEST BFS
+            forceGC(); 
             long startMemBFS = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
             
-            long startTotalBFS = System.nanoTime();
+            // Time BFS build
+            long startBuildBFS = System.nanoTime(); 
             GraphBFS bfsGraph = new GraphBFS(n);
-            for (int[] edge : edges) bfsGraph.addEdge(edge[0], edge[1]);
-            for (int[] q : queries) bfsGraph.isConnected(q[0], q[1]);
-            long endTotalBFS = System.nanoTime();
+            for (int[] edge : edges) bfsGraph.addEdge(edge[0], edge[1]); 
+            long buildTimeBFS = System.nanoTime() - startBuildBFS;
             
+            // Time BFS queries
+            long startQueryBFS = System.nanoTime();
+            for (int[] q : queries) bfsGraph.isConnected(q[0], q[1]); 
+            long queryTimeBFS = System.nanoTime() - startQueryBFS;
+            
+            // Get memory used
             long endMemBFS = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
-            totalTimeBFS += (endTotalBFS - startTotalBFS);
+            
+            totalBuildBFS += buildTimeBFS;
+            totalQueryBFS += queryTimeBFS;
             totalMemBFS += Math.max(0, endMemBFS - startMemBFS);
 
-            // --- Union-Find Evaluation (Resets every run) ---
-            Runtime.getRuntime().gc();
+            // 2. TEST UNION-FIND
+            forceGC(); 
             long startMemUF = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
             
-            long startTotalUF = System.nanoTime();
+            // Time UF build
+            long startBuildUF = System.nanoTime(); 
             UnionFind ufGraph = new UnionFind(n);
-            for (int[] edge : edges) ufGraph.union(edge[0], edge[1]);
-            for (int[] q : queries) ufGraph.isConnected(q[0], q[1]);
-            long endTotalUF = System.nanoTime();
+            for (int[] edge : edges) ufGraph.union(edge[0], edge[1]); 
+            long buildTimeUF = System.nanoTime() - startBuildUF;
             
+            // Time UF queries
+            long startQueryUF = System.nanoTime(); 
+            for (int[] q : queries) ufGraph.isConnected(q[0], q[1]);
+            long queryTimeUF = System.nanoTime() - startQueryUF;
+            
+            // Get memory used
             long endMemUF = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
-            totalTimeUF += (endTotalUF - startTotalUF);
+            
+            totalBuildUF += buildTimeUF;
+            totalQueryUF += queryTimeUF;
             totalMemUF += Math.max(0, endMemUF - startMemUF);
         }
 
-        // Calculation of Averages
-        double avgTimeBFS = (totalTimeBFS / (double) RUNS) / 1_000_000.0;
-        double avgTimeUF = (totalTimeUF / (double) RUNS) / 1_000_000.0;
+        // Calculate averages in ms
+        double avgBuildBFS = (totalBuildBFS / (double) RUNS) / 1_000_000.0;
+        double avgBuildUF  = (totalBuildUF / (double) RUNS) / 1_000_000.0;
+        double avgQueryBFS = (totalQueryBFS / (double) RUNS) / 1_000_000.0;
+        double avgQueryUF  = (totalQueryUF / (double) RUNS) / 1_000_000.0;
+        
+        // Convert to MB
         double avgMemBFS = (totalMemBFS / (double) RUNS) / (1024.0 * 1024.0);
         double avgMemUF = (totalMemUF / (double) RUNS) / (1024.0 * 1024.0);
 
-        // Calculation of Percentage Improvements
-        double timeImprovement = ((avgTimeBFS - avgTimeUF) / avgTimeBFS) * 100.0;
-        double memReduction = ((avgMemBFS - avgMemUF) / avgMemBFS) * 100.0;
-
-        System.out.printf("%-15s | %-12.3f | %-12.3f | %-11.1f%% | %-12.3f | %-12.3f | %-11.1f%%%n", 
-                datasetSize, avgTimeBFS, avgTimeUF, timeImprovement, avgMemBFS, avgMemUF, memReduction);
+        System.out.printf("%-10s | %-12.3f | %-12.3f | %-14.3f | %-14.3f | %-12.3f | %-12.3f%n", 
+                datasetSize, avgBuildBFS, avgBuildUF, avgQueryBFS, avgQueryUF, avgMemBFS, avgMemUF);
     }
 
     private static void performWarmup(int[][] allEdges) {
-        // Runs a few iterations on a small subset to "wake up" the CPU and JVM
-        int warmupSize = 1000;
+        int warmupSize = Math.min(1000, allEdges.length);
         int[][] warmEdges = Arrays.copyOfRange(allEdges, 0, warmupSize);
-        int n = 4039; // Fixed max for Facebook data
+        int n = 4039; 
         
         for (int i = 0; i < 5; i++) {
             UnionFind warmUF = new UnionFind(n);
@@ -117,6 +135,7 @@ public class RealDataBenchmark {
             while (scanner.hasNextLine()) {
                 String line = scanner.nextLine().trim();
                 if (line.isEmpty() || line.startsWith("#")) continue; 
+                
                 String[] parts = line.split("\\s+");
                 if (parts.length >= 2) {
                     edgeList.add(new int[]{Integer.parseInt(parts[0]), Integer.parseInt(parts[1])});
@@ -124,7 +143,7 @@ public class RealDataBenchmark {
             }
             scanner.close();
         } catch (FileNotFoundException e) { 
-            System.err.println("Dataset file not found.");
+            System.err.println("File not found: " + filename);
             return null; 
         }
         return edgeList.toArray(new int[0][]);
@@ -138,5 +157,13 @@ public class RealDataBenchmark {
             queries[i][1] = rand.nextInt(n);
         }
         return queries;
+    }
+
+    // Run garbage collector twice to get accurate memory
+    private static void forceGC() {
+        System.gc();
+        try { Thread.sleep(5); } catch (InterruptedException ignored) {}
+        System.gc();
+        try { Thread.sleep(5); } catch (InterruptedException ignored) {}
     }
 }
